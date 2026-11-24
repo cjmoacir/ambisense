@@ -276,9 +276,7 @@ void setup() {
     const RtcDateTime rtc = ds3231Now();
 
     loggerWrite(LOG_INFO, F("Sistema"), F("setup"),
-                String(F("DS3231 detectado=")) + (ds3231Available() ? F("sim") : F("nao")) +
-                    F(" leitura=") + rtc.day + F("/") + rtc.month + F("/") + rtc.year + F(" ") +
-                    rtc.hour + F(":") + rtc.minute + F(":") + rtc.second);
+                String(F("DS3231 detectado=")) + (ds3231Available() ? F("sim") : F("nao")) + F(" leitura=") + rtc.day + F("/") + rtc.month + F("/") + rtc.year + F(" ") + rtc.hour + F(":") + rtc.minute + F(":") + rtc.second);
   }
 
   // O dashboard é a prioridade: o Wi-Fi começa a conectar em segundo plano
