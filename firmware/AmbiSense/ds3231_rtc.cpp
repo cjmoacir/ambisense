@@ -44,31 +44,6 @@ void ds3231Begin() {
 
   Wire.begin(DS3231_SDA_PIN, DS3231_SCL_PIN);
 
-  // Diagnóstico único do barramento: o DS3231 deve responder em 0x68.
-  Serial.println(F("[I2C DS] scanner iniciado em SDA=11 SCL=12"));
-  uint8_t foundDevices = 0;
-
-  for (uint8_t address = 1; address < 127; address++) {
-
-    Wire.beginTransmission(address);
-
-    if (Wire.endTransmission() == 0) {
-
-      Serial.printf("[I2C DS] dispositivo encontrado: 0x%02X\n", address);
-      foundDevices++;
-    }
-  }
-
-  if (foundDevices == 0) {
-
-    Serial.println(F("[I2C DS] nenhum dispositivo respondeu"));
-  }
-
-  else {
-
-    Serial.printf("[I2C DS] total encontrado: %u\n", foundDevices);
-  }
-
   // Até 3 tentativas: logo após um reset o DS3231 pode demorar a responder.
   for (uint8_t attempt = 0; attempt < 3 && !available; attempt++) {
 
