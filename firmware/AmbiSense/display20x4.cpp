@@ -174,7 +174,7 @@ void drawScreen(const Mq2Reading &mq2, const ThermistorReading &thermistor,
     lines[2] = String("CO2    : ") + valueOrError(co2.valid, co2.valid ? String(co2.ppm) + " ppm" : "");
     lines[3] = String("          ") + (co2.valid ? co2Status(co2.ppm) : "SEM LEITURA");
   } else {
-    lines[0] = "MQ ^";
+    lines[0] = "MQ (Gases/Fumaca)  ^";
     lines[1] = String("  A0   : ") + mq2.analogValue + " " + mqStatus(mq2.analogValue);
     lines[2] = String("  D0   : ") + mq2.digitalValue + (mq2.digitalValue == 1 ? " NORMAL" : " ALARME");
     lines[3] = "";
