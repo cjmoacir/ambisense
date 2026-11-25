@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "ds3231_rtc.h"
+
 // Inicializa Wi‑Fi, portal de configuração e parâmetros salvos.
 void wifiTimeBegin();
 
@@ -13,6 +15,9 @@ void wifiTimeLoop();
 
 // Retorna o atraso configurado antes de ligar a exaustão forçada.
 uint32_t wifiTimeRelayDelaySeconds();
+
+// Retorna a hora local válida do NTP; usa o DS3231 como fallback.
+bool wifiTimeNow(RtcDateTime &dateTime);
 
 // Registra uma função chamada ao abrir/fechar o portal WiFiManager.
 void wifiTimeSetPortalStateCallback(void (*callback)(bool active));

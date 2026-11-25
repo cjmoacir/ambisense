@@ -12,6 +12,7 @@
 #include "storage_logger.h"
 #include "wifi_time.h"
 #include "alerts.h"  // ALERTAS_PATCH
+#include "display20x4.h"
 
 // Referência da tarefa que lê sensores e grava o histórico.
 static TaskHandle_t acquisitionTaskHandle = nullptr;
@@ -104,6 +105,8 @@ static void printMeasurements() {
 
   // Compara cada leitura com a faixa de alerta configurada no dashboard.
   alertsUpdate(mq2, thermistor, bme, co2);
+
+  displayUpdate(mq2, thermistor, bme, co2, relayIsOn());
 
   String message = F("MQ2_AO=");
   message += mq2.analogValue;
@@ -282,6 +285,8 @@ void setup() {
   // O dashboard é a prioridade: o Wi-Fi começa a conectar em segundo plano
   // (sem bloquear) e o servidor HTTP sobe no loop() assim que houver IP.
   buzzerBegin();
+
+  displayBegin();
 
   wifiTimeBegin();
 

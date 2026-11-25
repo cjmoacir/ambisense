@@ -6,6 +6,7 @@
 
 static constexpr uint8_t DS3231_ADDRESS = 0x68;
 static bool available = false;
+static uint32_t lastProbeAt = 0;
 
 static uint8_t decToBcd(uint8_t value) {
 
@@ -49,6 +50,7 @@ void ds3231Begin() {
     Wire1.beginTransmission(DS3231_ADDRESS);
 
     available = Wire1.endTransmission() == 0;
+    lastProbeAt = millis();
 
     if (!available) {
 
@@ -57,11 +59,24 @@ void ds3231Begin() {
   }
 }
 
+static void retryConnectionIfNeeded() {
+
+  if (available || millis() - lastProbeAt < 5000) {
+    return;
+  }
+
+  lastProbeAt = millis();
+  Wire1.beginTransmission(DS3231_ADDRESS);
+  available = Wire1.endTransmission() == 0;
+}
+
 bool ds3231Available() {
   return available;
 }
 
 RtcDateTime ds3231Now() {
+
+  retryConnectionIfNeeded();
 
   RtcDateTime result{0, 0, 0, 0, 0, 0};
   if (!available) {
@@ -102,10 +117,18 @@ RtcDateTime ds3231Now() {
 
   result.year = 2000 + bcdToDec(year);
 
+  if (result.year < 2020 || result.month < 1 || result.month > 12 ||
+      result.day < 1 || result.day > 31 || result.hour > 23 ||
+      result.minute > 59 || result.second > 59) {
+    return RtcDateTime{0, 0, 0, 0, 0, 0};
+  }
+
   return result;
 }
 
 bool ds3231Set(const RtcDateTime &dateTime) {
+
+  retryConnectionIfNeeded();
 
   if (!available)
     return false;

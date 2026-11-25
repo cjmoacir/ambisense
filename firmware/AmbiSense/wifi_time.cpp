@@ -877,7 +877,10 @@ void wifiTimeBegin() {
 
   WiFi.setSleep(false);
 
-  WiFi.setAutoReconnect(true);
+  // A reconexão automática do driver gera uma enxurrada de mensagens
+  // "wifi:Set status to INIT" quando a rede está indisponível. A tentativa é
+  // controlada manualmente abaixo, uma vez a cada 30 s.
+  WiFi.setAutoReconnect(false);
 
   loggerWrite(LOG_INFO, F("WiFi"), F("wifiTimeBegin"), String(F("MAC WiFi: ")) + WiFi.macAddress());
 
@@ -1045,6 +1048,27 @@ bool wifiTimeConnected() {
 uint32_t wifiTimeRelayDelaySeconds() {
 
   return relayDelaySeconds;
+}
+
+bool wifiTimeNow(RtcDateTime &dateTime) {
+
+  struct tm localTime;
+
+  if (getLocalTime(&localTime, 0)) {
+
+    dateTime.year = localTime.tm_year + 1900;
+    dateTime.month = localTime.tm_mon + 1;
+    dateTime.day = localTime.tm_mday;
+    dateTime.hour = localTime.tm_hour;
+    dateTime.minute = localTime.tm_min;
+    dateTime.second = localTime.tm_sec;
+    return true;
+  }
+
+  dateTime = ds3231Now();
+  return dateTime.year >= 2020 && dateTime.month >= 1 && dateTime.month <= 12 &&
+         dateTime.day >= 1 && dateTime.day <= 31 && dateTime.hour <= 23 &&
+         dateTime.minute <= 59 && dateTime.second <= 59;
 }
 
 void wifiTimeSetPortalStateCallback(void (*callback)(bool active)) {

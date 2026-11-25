@@ -1,6 +1,10 @@
 #include "logger.h"
 #include "ds3231_rtc.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <time.h>
+
+static SemaphoreHandle_t loggerMutex = nullptr;
 
 static const __FlashStringHelper *levelName(LogLevel level) {
 
@@ -25,6 +29,8 @@ static const __FlashStringHelper *levelName(LogLevel level) {
 void loggerBegin(uint32_t baudRate) {
 
   Serial.begin(baudRate);
+
+  loggerMutex = xSemaphoreCreateMutex();
 
   delay(300);
 }
@@ -62,6 +68,10 @@ void loggerWrite(LogLevel level, const String &module, const String &function,
     }
   }
 
+  if (loggerMutex != nullptr) {
+    xSemaphoreTake(loggerMutex, portMAX_DELAY);
+  }
+
   Serial.print(timestamp);
   Serial.print(F("\t"));
   Serial.print(levelName(level));
@@ -71,4 +81,8 @@ void loggerWrite(LogLevel level, const String &module, const String &function,
   Serial.print(function);
   Serial.print(F("\t"));
   Serial.println(message);
+
+  if (loggerMutex != nullptr) {
+    xSemaphoreGive(loggerMutex);
+  }
 }
