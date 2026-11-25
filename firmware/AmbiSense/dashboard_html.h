@@ -582,7 +582,7 @@ static const char DASHBOARD_PART_1[] PROGMEM = R"HTML(
     <div class="sl na" id="ntcStatus">NTC — aguardando leitura.</div>
     <div class="sl bme na" id="bmeStatus"><span class="cell na">BME680 — aguardando leitura.</span></div>
     <div class="sl na" id="co2Status">MH-Z19E — aguardando leitura.</div>
-    <div class="sl na" id="mqStatus">Gases e fumaça — aguardando leitura.</div>
+    <div class="sl na" id="mqStatus">MQ A0 — aguardando leitura.</div>
   </section>
 
   <h2>Leituras</h2>
@@ -621,16 +621,16 @@ static const char DASHBOARD_PART_1[] PROGMEM = R"HTML(
       <div class="lbl">MH-Z19E — CO₂</div>
       <div class="val" id="v-co2">--</div>
       <div class="bar"><div class="fill" id="b-co2"></div></div>
-      <div class="scale"><span>0 ppm</span><span>2000 ppm</span></div>
+      <div class="scale"><span>400 ppm</span><span>5000 ppm</span></div>
     </article>
     <article class="card metric na" id="c-mq">
-      <div class="lbl">MQ-2 — Gases (analógico)</div>
+      <div class="lbl">MQ — A0 (analógico)</div>
       <div class="val" id="v-mq">--</div>
       <div class="bar"><div class="fill" id="b-mq"></div></div>
       <div class="scale"><span>0</span><span>4095</span></div>
     </article>
     <article class="card metric na" id="c-do">
-      <div class="lbl">MQ-2 — Gases (digital)</div>
+      <div class="lbl">MQ — D0 (digital)</div>
       <div class="val" id="v-do" style="font-size:22px">--</div>
     </article>
     <article class="card metric na" id="c-relay">
@@ -689,22 +689,28 @@ static const char DASHBOARD_PART_1[] PROGMEM = R"HTML(
     </article>
     <article class="card note">
       <b>MH-Z19E — CO₂</b><br>
-      Adequado: abaixo de 800 ppm<br>
+      Normal: abaixo de 800 ppm<br>
       Atenção: 800 a 999 ppm<br>
-      Elevado: 1000 ppm ou mais<br>
+      Necessário ventilar: 1000 a 1499 ppm<br>
+      Alto: 1500 a 1999 ppm<br>
+      Muito alto: 2000 a 2999 ppm<br>
+      Crítico: 3000 a 3999 ppm<br>
+      Emergência: 4000 a 5000 ppm<br>
       <i>Nos primeiros minutos após ligar o sensor ainda está aquecendo.</i>
     </article>
     <article class="card note">
-      <b>MQ-2 — Gases (analógico)</b><br>
-      Normal: abaixo de 250<br>
-      Elevada: 250 a 1799<br>
-      Alarme: 1800 ou mais (limite do firmware)<br>
-      <i>Detecta presença de gás combustível e fumaça; não mede a concentração exata.</i>
+      <b>MQ — Leitura analógica A0</b><br>
+      Ar normal: 0 a 250<br>
+      Atenção: 251 a 500<br>
+      Ar alterado: 501 a 1000<br>
+      Poluição alta: 1001 a 1799<br>
+      Alarme: 1800 ou mais<br>
+      <i>É uma escala relativa do ADC; não representa ppm.</i>
     </article>
     <article class="card note">
-      <b>MQ-2 — Gases (digital)</b><br>
-      Normal: nível alto (DO = 1), gás abaixo do limite do módulo<br>
-      Acionada: nível baixo (DO = 0), gás acima do limite do módulo<br>
+      <b>MQ — D0 (digital)</b><br>
+      Normal: D0 = 1, gás abaixo do limite do módulo<br>
+      Alarme: D0 = 0, gás acima do limite do módulo<br>
       <i>O limite é ajustado no potenciômetro do módulo; o firmware não o conhece.</i>
     </article>
     <article class="card note">
@@ -791,9 +797,9 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       attention: 20
     }
   }
-  const sCo2 = v => v < 800 ? ['CO₂: nível adequado.', 'ok'] : v < 1000 ? ['CO₂: nível de atenção.', 'warn'] : ['CO₂: nível elevado.', 'bad'];
-  const sMq = v => v < 250 ? ['sem alteração relevante de gás ou fumaça.', 'ok'] : v < 1800 ? ['leitura elevada de gás ou fumaça.', 'warn'] : ['alarme de gás ou fumaça.', 'bad'];
-  const sTemp = v => v < 18 ? ['Temperatura: fria.', 'warn'] : v <= 28 ? ['Temperatura: amena.', 'ok'] : ['Temperatura: quente.', 'warn'];
+  const sCo2 = v => v < 800 ? ['NORMAL', 'ok'] : v < 1000 ? ['ATENCAO', 'warn'] : v < 1500 ? ['VENTILAR', 'bad'] : v < 2000 ? ['ALTO', 'bad'] : v < 3000 ? ['MUITO ALTO', 'bad'] : v < 4000 ? ['CRITICO', 'bad'] : ['EMERGENCIA', 'bad'];
+  const sMq = v => v <= 250 ? ['AR NORMAL', 'ok'] : v <= 500 ? ['ATENCAO', 'warn'] : v <= 1000 ? ['AR ALTERADO', 'warn'] : v < 1800 ? ['POLUICAO ALTA', 'bad'] : ['ALARME', 'bad'];
+  const sTemp = v => v < 18 ? ['Caixa: fria.', 'warn'] : v <= 28 ? ['Caixa: amena.', 'ok'] : ['Caixa: quente.', 'warn'];
   const sHum = h => h < 12 ? ['Umidade relativa: emergência.', 'bad'] : h <= 20 ? ['Umidade relativa: alerta.', 'bad'] : h <= 30 ? ['Umidade relativa: atenção.', 'warn'] : h < 40 ? ['Ar seco (moderado).', 'warn'] : h <= 70 ? ['Umidade relativa ideal.', 'ok'] : ['Ar muito úmido.', 'warn'];
   const sGas = v => {
     const l = gasLimits();
@@ -827,7 +833,7 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       box.className = 'sl bme bad';
       const c = document.createElement('span');
       c.className = 'cell bad';
-      c.textContent = 'BME680 — sensor com falha ou sem resposta.';
+      c.textContent = 'CAIXA — BME680 com falha ou sem resposta.';
       box.appendChild(c);
       return 'bad';
     }
@@ -835,7 +841,7 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
     const main = worst(parts.map(p => p[1]));
     box.className = 'sl bme na';
     [
-      ['BME680', main]
+      ['CAIXA', main]
     ].concat(parts).forEach(p => {
       const c = document.createElement('span');
       c.className = 'cell ' + p[1];
@@ -875,7 +881,7 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       const states = [];
 
       let st = co2 === null ? 'bad' : sCo2(co2)[1];
-      setMetric('co2', co2, 0, 'ppm', co2 / 20, st);
+      setMetric('co2', co2, 0, 'ppm', (co2 - 400) * 100 / (5000 - 400), st);
       states.push(st);
       if (co2 === null) setLine('co2Status', 'MH-Z19E — sensor com falha ou sem resposta.', 'bad');
       else setLine('co2Status', 'MH-Z19E — ' + sCo2(co2)[0], st);
@@ -883,7 +889,7 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       st = mq === null ? 'warn' : sMq(mq)[1];
       setMetric('mq', mq, 0, '', mq / 40.95, st);
       states.push(st);
-      setLine('mqStatus', mq === null ? 'Gases e fumaça — leitura indisponível.' : 'Gases e fumaça — ' + sMq(mq)[0], st);
+      setLine('mqStatus', mq === null ? 'MQ A0 — leitura indisponível.' : 'MQ A0 — ' + sMq(mq)[0], st);
 
       setMetric('temp', temp, 1, '°C', temp / .5, temp === null ? 'na' : sTemp(temp)[1]);
       setMetric('hum', hum, 1, '%UR', hum, hum === null ? 'na' : sHum(hum)[1]);
@@ -1133,12 +1139,17 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       ['co2', 'CO₂', 1]
     ],
     lim: () => [
-      [800, '800'],
-      [1000, '1000']
+      [800, 'normal/atenção'],
+      [1000, 'ventilar'],
+      [1500, 'alto'],
+      [2000, 'muito alto'],
+      [3000, 'crítico'],
+      [4000, 'emergência'],
+      [5000, 'limite do sensor']
     ]
   }, {
     id: 'mq',
-    title: 'MQ-2 — Gases (analógico)',
+    title: 'MQ — A0 (analógico)',
     unit: '',
     dec: 0,
     span: 50,
@@ -1146,7 +1157,10 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
       ['mq', 'Gases (analógico)', 1]
     ],
     lim: () => [
-      [250, '250']
+      [250, 'normal/atenção'],
+      [500, 'ar alterado'],
+      [1000, 'poluição alta'],
+      [1800, 'alarme']
     ]
   }, {
     id: 'do',
@@ -1234,6 +1248,14 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
           if (v < min) min = v;
           if (v > max) max = v
         }
+    // Inclui os limites configurados na escala para que as linhas tracejadas
+    // continuem visíveis mesmo quando a série atual não alcança uma faixa.
+    for (const L of ch.lim()) {
+      if (Number.isFinite(L[0])) {
+        if (L[0] < min) min = L[0];
+        if (L[0] > max) max = L[0];
+      }
+    }
     if (!isFinite(min)) {
       g.fillStyle = muted;
       g.textAlign = 'center';
@@ -1414,19 +1436,21 @@ static const char DASHBOARD_PART_4[] PROGMEM = R"HTML(
     co2: {
       u: 'ppm',
       p: [
-        ['Acima de 800 ppm (atenção)', '|800'],
-        ['Acima de 1000 ppm (elevado)', '|1000'],
-        ['Acima de 1500 ppm', '|1500'],
-        ['Acima de 2000 ppm', '|2000']
+        ['Atenção (a partir de 800 ppm)', '|800'],
+        ['Necessário ventilar (a partir de 1000 ppm)', '|1000'],
+        ['Alto (a partir de 1500 ppm)', '|1500'],
+        ['Muito alto (a partir de 2000 ppm)', '|2000'],
+        ['Crítico (a partir de 3000 ppm)', '|3000'],
+        ['Emergência (a partir de 4000 ppm)', '|4000']
       ]
     },
     mq: {
       u: '',
       p: [
-        ['Elevado (acima de 250)', '|250'],
-        ['Alto (acima de 500)', '|500'],
-        ['Muito alto (acima de 1000)', '|1000'],
-        ['Alarme (acima de 1800)', '|1800']
+        ['Atenção (a partir de 250)', '|250'],
+        ['Ar alterado (a partir de 500)', '|500'],
+        ['Poluição alta (a partir de 1000)', '|1000'],
+        ['Alarme (a partir de 1800)', '|1800']
       ]
     },
     temp: {

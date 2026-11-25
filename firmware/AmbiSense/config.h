@@ -77,9 +77,10 @@ constexpr uint8_t MHZ19_TX_PIN = 17;
 
 constexpr uint8_t MHZ19_RX_PIN = 18;
 
-constexpr uint8_t DS3231_SDA_PIN = 47;
+// DS3231 compartilha o barramento I2C do BME680.
+constexpr uint8_t DS3231_SDA_PIN = 11;
 
-constexpr uint8_t DS3231_SCL_PIN = 48;
+constexpr uint8_t DS3231_SCL_PIN = 12;
 
 // Pino que controla a exaustão forçada da caixa de sensores.
 constexpr uint8_t RELAY_PIN = 40;

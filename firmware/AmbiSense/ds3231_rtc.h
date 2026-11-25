@@ -24,3 +24,6 @@ RtcDateTime ds3231Now();
 
 // Grava a hora e limpa o flag de oscilador parado; falso se o DS3231 não confirmar.
 bool ds3231Set(const RtcDateTime &dateTime);
+
+// Executa uma varredura I2C de diagnóstico no barramento do DS3231.
+void ds3231PrintDiagnostic();

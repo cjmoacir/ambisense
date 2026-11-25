@@ -42,14 +42,39 @@ void ds3231Begin() {
     busMutex = xSemaphoreCreateMutex();
   }
 
-  Wire1.begin(DS3231_SDA_PIN, DS3231_SCL_PIN);
+  Wire.begin(DS3231_SDA_PIN, DS3231_SCL_PIN);
+
+  // Diagnóstico único do barramento: o DS3231 deve responder em 0x68.
+  Serial.println(F("[I2C DS] scanner iniciado em SDA=11 SCL=12"));
+  uint8_t foundDevices = 0;
+
+  for (uint8_t address = 1; address < 127; address++) {
+
+    Wire.beginTransmission(address);
+
+    if (Wire.endTransmission() == 0) {
+
+      Serial.printf("[I2C DS] dispositivo encontrado: 0x%02X\n", address);
+      foundDevices++;
+    }
+  }
+
+  if (foundDevices == 0) {
+
+    Serial.println(F("[I2C DS] nenhum dispositivo respondeu"));
+  }
+
+  else {
+
+    Serial.printf("[I2C DS] total encontrado: %u\n", foundDevices);
+  }
 
   // Até 3 tentativas: logo após um reset o DS3231 pode demorar a responder.
   for (uint8_t attempt = 0; attempt < 3 && !available; attempt++) {
 
-    Wire1.beginTransmission(DS3231_ADDRESS);
+    Wire.beginTransmission(DS3231_ADDRESS);
 
-    available = Wire1.endTransmission() == 0;
+    available = Wire.endTransmission() == 0;
     lastProbeAt = millis();
 
     if (!available) {
@@ -66,8 +91,8 @@ static void retryConnectionIfNeeded() {
   }
 
   lastProbeAt = millis();
-  Wire1.beginTransmission(DS3231_ADDRESS);
-  available = Wire1.endTransmission() == 0;
+  Wire.beginTransmission(DS3231_ADDRESS);
+  available = Wire.endTransmission() == 0;
 }
 
 bool ds3231Available() {
@@ -86,24 +111,24 @@ RtcDateTime ds3231Now() {
 
   BusLock lock;
 
-  Wire1.beginTransmission(DS3231_ADDRESS);
+  Wire.beginTransmission(DS3231_ADDRESS);
 
-  Wire1.write(0x00);
+  Wire.write(0x00);
 
-  if (Wire1.endTransmission(false) != 0 || Wire1.requestFrom(DS3231_ADDRESS, (uint8_t)7) != 7) {
+  if (Wire.endTransmission(false) != 0 || Wire.requestFrom(DS3231_ADDRESS, (uint8_t)7) != 7) {
 
     return result;
   }
 
-  const uint8_t seconds = Wire1.read();
-  const uint8_t minutes = Wire1.read();
-  const uint8_t hours = Wire1.read();
+  const uint8_t seconds = Wire.read();
+  const uint8_t minutes = Wire.read();
+  const uint8_t hours = Wire.read();
 
-  Wire1.read();  // dia da semana
+  Wire.read();  // dia da semana
 
-  const uint8_t day = Wire1.read();
-  const uint8_t month = Wire1.read();
-  const uint8_t year = Wire1.read();
+  const uint8_t day = Wire.read();
+  const uint8_t month = Wire.read();
+  const uint8_t year = Wire.read();
 
   result.second = bcdToDec(seconds & 0x7F);
 
@@ -135,25 +160,56 @@ bool ds3231Set(const RtcDateTime &dateTime) {
 
   BusLock lock;
 
-  Wire1.beginTransmission(DS3231_ADDRESS);
-  Wire1.write(0x00);
-  Wire1.write(decToBcd(dateTime.second));
-  Wire1.write(decToBcd(dateTime.minute));
-  Wire1.write(decToBcd(dateTime.hour));
-  Wire1.write(1);
-  Wire1.write(decToBcd(dateTime.day));
-  Wire1.write(decToBcd(dateTime.month));
-  Wire1.write(decToBcd(dateTime.year - 2000));
+  Wire.beginTransmission(DS3231_ADDRESS);
+  Wire.write(0x00);
+  Wire.write(decToBcd(dateTime.second));
+  Wire.write(decToBcd(dateTime.minute));
+  Wire.write(decToBcd(dateTime.hour));
+  Wire.write(1);
+  Wire.write(decToBcd(dateTime.day));
+  Wire.write(decToBcd(dateTime.month));
+  Wire.write(decToBcd(dateTime.year - 2000));
 
-  const bool timeWritten = Wire1.endTransmission() == 0;
+  const bool timeWritten = Wire.endTransmission() == 0;
 
   // Limpa o flag OSF (registrador de status 0x0F): indica que o oscilador
   // parou e a hora anterior não era confiável.
-  Wire1.beginTransmission(DS3231_ADDRESS);
-  Wire1.write(0x0F);
-  Wire1.write(0x00);
+  Wire.beginTransmission(DS3231_ADDRESS);
+  Wire.write(0x0F);
+  Wire.write(0x00);
 
-  const bool statusCleared = Wire1.endTransmission() == 0;
+  const bool statusCleared = Wire.endTransmission() == 0;
 
   return timeWritten && statusCleared;
+}
+
+void ds3231PrintDiagnostic() {
+
+  Serial.println(F("[I2C DS] scanner iniciado em SDA=11 SCL=12"));
+  uint8_t foundDevices = 0;
+
+  if (busMutex) {
+    xSemaphoreTake(busMutex, portMAX_DELAY);
+  }
+
+  for (uint8_t address = 1; address < 127; address++) {
+
+    Wire.beginTransmission(address);
+
+    if (Wire.endTransmission() == 0) {
+
+      Serial.printf("[I2C DS] dispositivo encontrado: 0x%02X\n", address);
+      foundDevices++;
+    }
+  }
+
+  if (busMutex) {
+    xSemaphoreGive(busMutex);
+  }
+
+  if (foundDevices == 0) {
+    Serial.println(F("[I2C DS] nenhum dispositivo respondeu"));
+  } else {
+    Serial.printf("[I2C DS] total encontrado: %u\n", foundDevices);
+  }
 }

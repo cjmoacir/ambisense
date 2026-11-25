@@ -1,6 +1,7 @@
 #include "display20x4.h"
 
 #include <WiFi.h>
+#include <Wire.h>
 #include <math.h>
 
 #include "config.h"
@@ -9,8 +10,6 @@
 
 namespace {
 
-constexpr uint8_t LCD_SDA_PIN = 8;
-constexpr uint8_t LCD_SCL_PIN = 9;
 constexpr uint8_t LCD_ADDRESS = 0x27;
 constexpr uint8_t LCD_BACKLIGHT = 0x08;
 constexpr uint8_t LCD_ENABLE = 0x04;
@@ -20,65 +19,10 @@ uint8_t screen = 0;
 uint32_t lastScreenAt = 0;
 uint32_t lastDrawAt = 0;
 
-void clockHigh() {
-  pinMode(LCD_SCL_PIN, INPUT_PULLUP);
-}
-
-void clockLow() {
-  pinMode(LCD_SCL_PIN, OUTPUT);
-  digitalWrite(LCD_SCL_PIN, LOW);
-}
-
-void dataHigh() {
-  pinMode(LCD_SDA_PIN, INPUT_PULLUP);
-}
-
-void dataLow() {
-  pinMode(LCD_SDA_PIN, OUTPUT);
-  digitalWrite(LCD_SDA_PIN, LOW);
-}
-
-void i2cStart() {
-  dataHigh();
-  clockHigh();
-  delayMicroseconds(4);
-  dataLow();
-  delayMicroseconds(4);
-  clockLow();
-}
-
-void i2cStop() {
-  dataLow();
-  clockHigh();
-  delayMicroseconds(4);
-  dataHigh();
-  delayMicroseconds(4);
-}
-
-bool i2cWriteByte(uint8_t value) {
-  for (uint8_t bit = 0; bit < 8; bit++) {
-    if (value & 0x80) dataHigh();
-    else dataLow();
-    clockHigh();
-    delayMicroseconds(3);
-    clockLow();
-    value <<= 1;
-  }
-
-  dataHigh();
-  clockHigh();
-  delayMicroseconds(3);
-  const bool acknowledged = digitalRead(LCD_SDA_PIN) == LOW;
-  clockLow();
-  return acknowledged;
-}
-
 bool expanderWrite(uint8_t value) {
-  i2cStart();
-  const bool addressAck = i2cWriteByte(static_cast<uint8_t>(LCD_ADDRESS << 1));
-  const bool dataAck = i2cWriteByte(value | LCD_BACKLIGHT);
-  i2cStop();
-  return addressAck && dataAck;
+  Wire.beginTransmission(LCD_ADDRESS);
+  Wire.write(value | LCD_BACKLIGHT);
+  return Wire.endTransmission() == 0;
 }
 
 void lcdPulse(uint8_t value) {
@@ -104,8 +48,27 @@ void lcdData(uint8_t value) {
   lcdWrite4(static_cast<uint8_t>(value << 4), true);
 }
 
+void lcdCreateNegationChar() {
+  static const uint8_t glyph[8] = {
+      0b11111,
+      0b00001,
+      0b00001,
+      0b00001,
+      0b00000,
+      0b00000,
+      0b00000,
+      0b00000};
+
+  lcdCommand(0x40);
+  for (uint8_t row = 0; row < 8; row++) lcdData(glyph[row]);
+  lcdCommand(0x02);
+}
+
 void lcdText(const String &text) {
-  for (size_t i = 0; i < text.length() && i < 20; i++) lcdData(text[i]);
+  for (size_t i = 0; i < text.length() && i < 20; i++) {
+    // '^' é o marcador interno do caractere personalizado "¬".
+    lcdData(text[i] == '^' ? 0 : text[i]);
+  }
 }
 
 String fit20(String text) {
@@ -120,52 +83,111 @@ void lcdLine(uint8_t row, const String &text) {
   lcdText(fit20(text));
 }
 
+void lcdPrintFrame(const String lines[4]) {
+  static const uint8_t offsets[] = {0x00, 0x40, 0x14, 0x54};
+  String frame;
+  frame.reserve(80);
+
+  for (uint8_t row = 0; row < 4; row++) {
+    frame += fit20(lines[row]);
+  }
+
+  for (uint8_t row = 0; row < 4; row++) {
+    lcdCommand(static_cast<uint8_t>(0x80 | offsets[row]));
+    lcdText(frame.substring(row * 20, row * 20 + 20));
+  }
+}
+
 String valueOrError(bool valid, const String &value) {
   return valid ? value : String("ERRO");
 }
 
+float saturationFactor(float temperature) {
+  return expf(17.27f * temperature / (237.7f + temperature));
+}
+
+bool calculateFeelsLike(const ThermistorReading &thermistor,
+                        const Bme680Reading &bme, float &result) {
+  if (!bme.valid && !thermistor.valid) return false;
+
+  const float baseTemperature = thermistor.valid ? thermistor.temperature : bme.temperature;
+  if (!bme.valid) return false;
+
+  float relativeHumidity = bme.humidity;
+  if (thermistor.valid && bme.valid) {
+    relativeHumidity = bme.humidity * saturationFactor(bme.temperature) /
+                       saturationFactor(thermistor.temperature);
+  }
+
+  relativeHumidity = constrain(relativeHumidity, 0.0f, 100.0f);
+  result = baseTemperature +
+           0.33f * (relativeHumidity / 100.0f * 6.105f * saturationFactor(baseTemperature)) -
+           4.0f;
+  return isfinite(result);
+}
+
+const char *mqStatus(int analogValue) {
+  if (analogValue <= 250) return "NORMAL";
+  if (analogValue <= 500) return "ATENCAO";
+  if (analogValue <= 1000) return "ALTERADO";
+  if (analogValue < MQ2_ALARM_LEVEL) return "POLUICAO";
+  return "ALARME";
+}
+
+const char *co2Status(uint16_t ppm) {
+  if (ppm < 800) return "NORMAL";
+  if (ppm < 1000) return "ATENCAO";
+  if (ppm < 1500) return "VENTILAR";
+  if (ppm < 2000) return "ALTO";
+  if (ppm < 3000) return "M.ALTO";
+  if (ppm < 4000) return "CRITICO";
+  return "EMERG.";
+}
+
 void drawScreen(const Mq2Reading &mq2, const ThermistorReading &thermistor,
                 const Bme680Reading &bme, const Co2Reading &co2, bool relayOn) {
-  lcdCommand(0x01);
+  String lines[4];
 
   if (screen == 0) {
-    lcdLine(0, "AmbiSense");
-    lcdLine(1, String("IP:") + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "sem WiFi"));
+    lines[0] = "AmbiSense";
+    lines[1] = String("Net : ") + (WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "sem WiFi");
+    lines[2] = String("IP  : ") + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "--");
     RtcDateTime now{};
     if (wifiTimeNow(now)) {
       char dateTime[21];
       snprintf(dateTime, sizeof(dateTime), "%02u/%02u/%04u %02u:%02u:%02u",
                now.day, now.month, now.year, now.hour, now.minute, now.second);
-      lcdLine(2, dateTime);
+      lines[3] = dateTime;
     } else {
-      lcdLine(2, "Hora: aguardando NTP");
+      lines[3] = "--/--/---- --:--:--";
     }
-    lcdLine(3, WiFi.status() == WL_CONNECTED
-                    ? String("WiFi: ") + WiFi.SSID()
-                    : "WiFi: desconectado");
   } else if (screen == 1) {
-    lcdLine(0, String("CO2: ") + valueOrError(co2.valid, String(co2.ppm)) + (co2.valid ? " ppm" : ""));
-    lcdLine(1, String("Temp: ") + valueOrError(bme.valid, bme.valid ? String(bme.temperature, 1) + " C" : ""));
-    lcdLine(2, String("Umid: ") + valueOrError(bme.valid, bme.valid ? String(bme.humidity, 1) + " %" : ""));
-    lcdLine(3, String("Exaustao: ") + (relayOn ? "ON" : "OFF"));
+    float feelsLike = NAN;
+    const bool feelsLikeValid = calculateFeelsLike(thermistor, bme, feelsLike);
+    lines[0] = "Temperatura ^";
+    lines[1] = String("  NTC  : ") + valueOrError(thermistor.valid, thermistor.valid ? String(thermistor.temperature, 1) + " C" : "");
+    lines[2] = String("  Sens : ") + valueOrError(feelsLikeValid, feelsLikeValid ? String(feelsLike, 1) + " C" : "");
+    lines[3] = String("  Caixa: ") + valueOrError(bme.valid, bme.valid ? String(bme.temperature, 1) + " C" : "");
   } else if (screen == 2) {
-    lcdLine(0, String("MQ: ") + mq2.analogValue + " DO:" + mq2.digitalValue);
-    lcdLine(1, String("NTC: ") + valueOrError(thermistor.valid, thermistor.valid ? String(thermistor.temperature, 1) + " C" : ""));
-    lcdLine(2, String("Press: ") + valueOrError(bme.valid, bme.valid ? String(bme.pressureHpa, 0) + " hPa" : ""));
-    lcdLine(3, String("BME: ") + (bme.valid ? "OK" : "ERRO"));
+    lines[0] = String("Patm   : ") + valueOrError(bme.valid, bme.valid ? String(bme.pressureHpa, 1) + " hPa" : "");
+    lines[1] = String("R Gas  : ") + valueOrError(bme.valid, bme.valid ? String(bme.gasKohm, 1) + " kOhm" : "");
+    lines[2] = String("CO2    : ") + valueOrError(co2.valid, co2.valid ? String(co2.ppm) + " ppm" : "");
+    lines[3] = String("          ") + (co2.valid ? co2Status(co2.ppm) : "SEM LEITURA");
   } else {
-    lcdLine(0, "Sensores AmbiSense");
-    lcdLine(1, String("CO2: ") + (co2.valid ? "OK" : "ERRO"));
-    lcdLine(2, String("MQ: ") + (mq2.alarm ? "ALARME" : "OK"));
-    lcdLine(3, String("Rele: ") + (relayOn ? "LIGADO" : "DESLIGADO"));
+    lines[0] = "MQ ^";
+    lines[1] = String("  A0   : ") + mq2.analogValue + " " + mqStatus(mq2.analogValue);
+    lines[2] = String("  D0   : ") + mq2.digitalValue + (mq2.digitalValue == 1 ? " NORMAL" : " ALARME");
+    lines[3] = "";
   }
+
+  lcdPrintFrame(lines);
 }
 
 }  // namespace
 
 void displayBegin() {
-  pinMode(LCD_SDA_PIN, INPUT_PULLUP);
-  pinMode(LCD_SCL_PIN, INPUT_PULLUP);
+  // Compartilha o mesmo barramento dos sensores: BME680, DS3231 e display.
+  Wire.begin(BME680_SDA_PIN, BME680_SCL_PIN);
   delay(50);
 
   lcdWrite4(0x30, false);
@@ -179,6 +201,7 @@ void displayBegin() {
   lcdCommand(0x01);
   lcdCommand(0x06);
   lcdCommand(0x0C);
+  lcdCreateNegationChar();
 
   ready = expanderWrite(LCD_BACKLIGHT);
   if (ready) lcdCommand(0x01);
@@ -189,7 +212,7 @@ void displayUpdate(const Mq2Reading &mq2, const ThermistorReading &thermistor,
                   bool relayOn) {
   if (!ready) return;
   const uint32_t now = millis();
-  if (now - lastScreenAt >= 4000) {
+  if (now - lastScreenAt >= 5000) {
     lastScreenAt = now;
     screen = static_cast<uint8_t>((screen + 1) % 4);
   }

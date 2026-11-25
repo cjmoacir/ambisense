@@ -335,6 +335,14 @@ void loop() {
 
   wifiTimeLoop();
 
+  // Diagnóstico atrasado para ficar visível mesmo quando o monitor serial
+  // é aberto depois do boot.
+  static bool dsDiagnosticDone = false;
+  if (!dsDiagnosticDone && millis() >= 5000) {
+    ds3231PrintDiagnostic();
+    dsDiagnosticDone = true;
+  }
+
   buzzerLoop();
 
   // Toca o padrão sonoro dos alertas disparados pela coleta.
